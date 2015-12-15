@@ -1,0 +1,92 @@
+from urllib import request
+from threading import Thread
+from pprint import pprint
+import json
+
+SHARE_URL = 'http://yun.baidu.com/pcloud/feed/getsharelist?category=0&auth_type=1&start={start}&limit={limit}&query_uk={uk}'
+FOLLOW_URL = 'http://yun.baidu.com/pcloud/friend/getfollowlist?query_uk={uk}&limit={limit}&start={start}'
+FANS_URL = 'http://yun.baidu.com/pcloud/friend/getfanslist?query_uk={uk}&limit={limit}&start={start}'
+RESOURCE_LINK = 'http://pan.baidu.com/share/link?uk={uk}&shareid={shareid}'
+
+uk_togo_s = [('1040300808','94')]
+uk_visited_s = []
+uk_togo_f = [('1040300808','6','2223')]
+uk_visited_f = []
+found = []
+
+def get_share():
+    if not uk_togo_s:
+        pass
+    else:
+        uk = uk_togo_s.pop()
+        if uk[0] in uk_visited_s:
+            pass
+        else:
+            url = SHARE_URL.format(uk = uk[0],limit = '100',start = '0')
+            follow_page = request.urlopen(url).read().decode('utf_8')
+            js = json.loads(follow_page)
+            for item in js['records']:
+                name = item['filelist'][0]['server_filename']
+                url = RESOURCE_LINK.format(uk = uk[0],shareid = item['shareid'])
+                print(name + ' ' + url)
+
+def get_follow_funs(limit = 10):
+    count = 0
+    while(count < limit):
+        if not uk_togo_f:
+            pass
+        else:
+            uk = uk_togo_f.pop()
+            if uk[0] in uk_visited_f:
+                pass
+            else:
+                uk_visited_f.append(uk[0])
+                if(int(uk[1])):
+                    get_follow(uk)
+                if(int(uk[2])):
+                    get_fans(uk)
+                count += 1
+
+#获取follow_uk存入togolist
+def get_follow(uk,start = 0):
+    url = FOLLOW_URL.format(uk = uk[0] ,limit = '24',start = str(start))
+    follow_page = request.urlopen(url).read().decode('utf_8')
+    js = json.loads(follow_page)
+    for item in js['follow_list']:
+        next_uk = str(item['follow_uk'])
+        follow_count = item['follow_count']
+        fans_count = item['fans_count']
+        pubshare_count = item['pubshare_count']
+        if follow_count or fans_count:
+            uk_togo_f.append((next_uk,str(follow_count),str(fans_count)))
+        if pubshare_count:
+            uk_togo_s.append((next_uk,str(pubshare_count)))
+#获取fans_uk存入togolist
+def get_fans(uk,start = 0):
+    url = FANS_URL.format(uk = uk[0],limit = '24',start = str(start))
+    fans_page = request.urlopen(url).read().decode('utf_8')
+    js = json.loads(fans_page)
+    for item in js['fans_list']:
+        next_uk = str(item['fans_uk'])
+        follow_count = item['follow_count']
+        fans_count = item['fans_count']
+        pubshare_count = item['pubshare_count']
+        if follow_count or fans_count:
+            uk_togo_f.append((next_uk,str(follow_count),str(fans_count)))
+        if pubshare_count:
+            uk_togo_s.append((next_uk,str(pubshare_count)))
+
+# url2 = SHARE_URL.format(uk = '1040300808',limit = '24',start = '0')
+# url = FOLLOW_URL.format(uk = '1040300808',limit = '24',start = '0')
+# url3 = FANS_URL.format(uk = '1040300808',limit = '24',start = '0')
+# page = request.urlopen(url2).read().decode('utf-8')
+# js = json.loads(page)
+# print(js.keys())
+# pprint(js)
+
+# get_follow_funs(3)
+# print(uk_togo_f)
+# print(uk_togo_s)
+# print(uk_visited_f)
+
+# get_share()
