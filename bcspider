@@ -2,19 +2,44 @@ from urllib import request
 from threading import Thread
 from pprint import pprint
 import json
+import requests
 import re
 
 SHARE_URL = 'http://yun.baidu.com/pcloud/feed/getsharelist?category=0&auth_type=1&start={start}&limit={limit}&query_uk={uk}'
 FOLLOW_URL = 'http://yun.baidu.com/pcloud/friend/getfollowlist?query_uk={uk}&limit={limit}&start={start}'
 FANS_URL = 'http://yun.baidu.com/pcloud/friend/getfanslist?query_uk={uk}&limit={limit}&start={start}'
 RESOURCE_LINK = 'http://pan.baidu.com/share/link?uk={uk}&shareid={shareid}'
+REFERER_LINK = 'http://yun.baidu.com/share/home?uk={uk}'
 
 uk_togo_s = [('1040300808','94')]
 uk_visited_s = []
 uk_togo_f = [('1040300808','6','2223')]
 uk_visited_f = []
 found = []
-keyword = u'火星'
+keyword = u'杨建民'
+
+def get_page(uk,url):
+    referer_link = REFERER_LINK.format(uk = uk[0])
+    header = {'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 '
+                           'Safari/537.36',
+              'Referer':referer_link,
+              'Host':'yun.baidu.com'}
+    cookie = {'Cookie':'BAIDUID=6C97D9915D16B5B4EDF6DEA8DA99E5F1:FG=1; BIDUPSID=6C97D9915D16B5B4EDF6DEA8DA99E5F1; '
+                       'PSTM=1449032096; BDUSS=VFdFZRbVFGWGExVks5RTJpYjdGZldhVHVjTTIwcGE1S0F0T2dQclNJZDNRWVpXQVFBQUFBJCQ'
+                       'AAAAAAAAAAAEAAADHE4dVsKKyvN~V39Xf1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                       'AAAAAAAAAAHe0XlZ3tF5WZz; PANWEB=1; bdshare_firstime=1449298370561; BDRCVFR[feWj1Vr5u3D]=I67x6TjH'
+                       'wwYf0; H_PS_PSSID=17519_1427_17465_17956_12825_18500_17001_17073_15383_11960; PANPSC=96799115803'
+                       '21796371%3A9qIJoSpryQ%2FX2iTXy2cD%2FLHQG6qeixv0uxwJd6MRHDp%2B6Yuxn6Hsq%2BWktbItQxSk%2BW4789N%2Bm'
+                       'bAkGiJzAoFozbe76RYpzY3mdL9pC%2FBkxjzUyaWyDH%2FnU3W7XMfVMhDyXnSeHkJckrKP8XxTJKWpuLSjlJEoQsPI7umhS'
+                       'JkqM9V92oDciHDHqIgO3%2FbrwWtvgy7iFaD7TFaLIWeznIUCtak8hK56gLekfbZ%2FbYW506YYeZrkpSoG3g%3D%3D; Hm_'
+                       'lvt_1d15eaebea50a900b7ddf4fa8d05c8a0=1450249297,1450596110; Hm_lpvt_1d15eaebea50a900b7ddf4fa8d05'
+                       'c8a0=1450596110; Hm_lvt_f5f83a6d8b15775a02760dc5f490bc47=1450249297,1450596110; Hm_lpvt_f5f83a6d'
+                       '8b15775a02760dc5f490bc47=1450596110; Hm_lvt_773fea2ac036979ebb5fcc768d8beb67=1449481160,14498134'
+                       '71,1450249305,1450596115; Hm_lpvt_773fea2ac036979ebb5fcc768d8beb67=1450596118; Hm_lvt_adf736c22c'
+                       'd6bcc36a1d27e5af30949e=1449481160,1449813448,1450249305,1450596115; Hm_lpvt_adf736c22cd6bcc36a1d'
+                       '27e5af30949e=1450596118'}
+    r = requests.get(url,cookies = cookie,headers = header)
+    return r.json()
 
 def get_share():
     if not uk_togo_s:
@@ -29,18 +54,20 @@ def get_share():
 
 def get_items(uk,start=0):
     url = SHARE_URL.format(uk=uk[0], limit='100', start=start)
-    follow_page = request.urlopen(url).read().decode('utf_8')
-    js = json.loads(follow_page)
-    for item in js['records']:
-        name = item['filelist'][0]['server_filename']
-        if(re.search(keyword,name)):
-            item_url = RESOURCE_LINK.format(uk=uk[0], shareid=item['shareid'])
-            found.append((name,item_url))
-    if (uk[1] > start+100):
-        get_items(uk,start+100)
+    js = get_page(uk,url)
+    if(js['errno'] == 0):
+        for item in js['records']:
+            name = item['filelist'][0]['server_filename']
+            if(re.search(keyword,name)):
+                item_url = RESOURCE_LINK.format(uk=uk[0], shareid=item['shareid'])
+                found.append((name,item_url))
+        if (int(uk[1]) > start+100):
+            get_items(uk,start+100)
+    else:
+        print('抓取失败')
 
 
-def get_follow_funs(limit = 1000):
+def get_follow_funs(limit = 20):
     while(len(found)<10 and len(uk_visited_s)<limit):
         if not uk_togo_f:
             pass
@@ -59,34 +86,43 @@ def get_follow_funs(limit = 1000):
 #获取follow_uk存入togolist
 def get_follow(uk,start = 0):
     url = FOLLOW_URL.format(uk = uk[0] ,limit = '24',start = str(start))
-    follow_page = request.urlopen(url).read().decode('utf_8')
-    js = json.loads(follow_page)
-    for item in js['follow_list']:
-        next_uk = str(item['follow_uk'])
-        follow_count = item['follow_count']
-        fans_count = item['fans_count']
-        pubshare_count = item['pubshare_count']
-        if follow_count or fans_count:
-            uk_togo_f.append((next_uk,str(follow_count),str(fans_count)))
-        if pubshare_count:
-            uk_togo_s.append((next_uk,str(pubshare_count)))
+    js = get_page(uk,url)
+    if(js['errno'] == 0):
+        for item in js['follow_list']:
+            next_uk = str(item['follow_uk'])
+            follow_count = item['follow_count']
+            fans_count = item['fans_count']
+            pubshare_count = item['pubshare_count']
+            if follow_count or fans_count:
+                uk_togo_f.append((next_uk,str(follow_count),str(fans_count)))
+            if pubshare_count:
+                uk_togo_s.append((next_uk,str(pubshare_count)))
+        print('完成对用户%s的follow抓取'%(uk[0]))
+    else:
+        print('抓取失败')
+
 
 #获取fans_uk存入togolist
 def get_fans(uk,start = 0):
     url = FANS_URL.format(uk = uk[0],limit = '24',start = str(start))
-    fans_page = request.urlopen(url).read().decode('utf_8')
-    js = json.loads(fans_page)
-    for item in js['fans_list']:
-        next_uk = str(item['fans_uk'])
-        follow_count = item['follow_count']
-        fans_count = item['fans_count']
-        pubshare_count = item['pubshare_count']
-        if follow_count or fans_count:
-            uk_togo_f.append((next_uk,str(follow_count),str(fans_count)))
-        if pubshare_count:
-            uk_togo_s.append((next_uk,str(pubshare_count)))
+    js = get_page(uk,url)
+    if(js['errno'] == 0):
+        for item in js['fans_list']:
+            next_uk = str(item['fans_uk'])
+            follow_count = item['follow_count']
+            fans_count = item['fans_count']
+            pubshare_count = item['pubshare_count']
+            if follow_count or fans_count:
+                uk_togo_f.append((next_uk,str(follow_count),str(fans_count)))
+            if pubshare_count:
+                uk_togo_s.append((next_uk,str(pubshare_count)))
+        print('完成对用户%s的funs抓取'%(uk[0]))
+    else:
+        print('抓取失败')
 
-# get_follow_funs()
+
+get_follow_funs()
+print(uk_togo_s)
 # get_share()
 # print(found)
 
@@ -94,3 +130,4 @@ def get_fans(uk,start = 0):
 # fans_page = request.urlopen(url1).read().decode('utf_8')
 # js = json.loads(fans_page)
 # pprint(js)
+
